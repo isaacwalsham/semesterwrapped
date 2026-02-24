@@ -1000,11 +1000,21 @@ body.sw-exporting .sw-panel:hover {
   }
 
   .sw-workspace {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     padding: 10px 8px calc(16px + env(safe-area-inset-bottom));
     overflow: visible;
     flex: 0 0 auto;
+  }
+
+  .sw-panel--preview {
+    order: 1;
+  }
+
+  .sw-panel--inputs {
+    order: 2;
+    max-height: 58vh;
   }
 
   .sw-topbar {
@@ -1077,7 +1087,7 @@ body.sw-exporting .sw-panel:hover {
   }
 
   .sw-panel-body {
-    overflow: visible;
+    overflow: auto;
     padding: 10px 12px 12px;
   }
 
@@ -1113,8 +1123,8 @@ body.sw-exporting .sw-panel:hover {
   }
 
   .sw-preview-pad {
-    min-height: 420px;
-    height: clamp(420px, 64vh, 700px);
+    min-height: 340px;
+    height: clamp(340px, 50vh, 540px);
   }
 }
 
@@ -1156,7 +1166,11 @@ body.sw-exporting .sw-panel:hover {
   }
 
   .sw-preview-pad {
-    min-height: 360px;
-    height: clamp(360px, 60vh, 560px);
+    min-height: 300px;
+    height: clamp(300px, 46vh, 460px);
+  }
+
+  .sw-panel--inputs {
+    max-height: 56vh;
   }
 }
