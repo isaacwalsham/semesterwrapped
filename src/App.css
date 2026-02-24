@@ -984,31 +984,46 @@ body.sw-exporting .sw-panel:hover {
     width: 100%;
     height: auto;
     min-height: 100dvh;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   .sw-shell,
   .sw-workspace {
-    width: calc(100vw - 20px);
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .sw-shell {
+    padding: calc(10px + env(safe-area-inset-top)) 8px 0;
+    position: static;
+  }
+
+  .sw-workspace {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 10px 8px calc(16px + env(safe-area-inset-bottom));
+    overflow: visible;
+    flex: 0 0 auto;
   }
 
   .sw-topbar {
-    top: 8px;
+    position: static;
     padding: 12px;
-    gap: 12px;
+    gap: 10px;
     align-items: flex-start;
     flex-wrap: wrap;
+    border-radius: 18px;
   }
 
   .sw-title {
-    font-size: 20px;
+    font-size: 19px;
   }
 
   .sw-actions {
     width: 100%;
     margin-left: 0;
-    gap: 10px;
+    gap: 8px;
     align-items: flex-start;
     justify-content: flex-start;
     flex-wrap: wrap;
@@ -1027,8 +1042,13 @@ body.sw-exporting .sw-panel:hover {
     width: 100%;
   }
 
+  .sw-actions .sw-btn {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
   .sw-panel {
-    border-radius: 22px;
+    border-radius: 20px;
   }
 
   .sw-panel-head {
@@ -1044,15 +1064,20 @@ body.sw-exporting .sw-panel:hover {
 
   .sw-tabs {
     width: 100%;
-    overflow-x: auto;
-    justify-content: flex-start;
+    overflow: visible;
+    justify-content: stretch;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .sw-tab {
     white-space: nowrap;
+    text-align: center;
+    width: 100%;
   }
 
   .sw-panel-body {
+    overflow: visible;
     padding: 10px 12px 12px;
   }
 
@@ -1074,41 +1099,43 @@ body.sw-exporting .sw-panel:hover {
     padding: 12px;
     gap: 10px;
     flex-wrap: wrap;
+    align-items: flex-start;
   }
 
   .sw-sizehint {
     font-size: 12.5px;
+    width: 100%;
   }
 
   .sw-preview__stage {
     padding: 10px;
+    align-items: center;
   }
 
   .sw-preview-pad {
-    min-height: 360px;
-    height: min(58vh, 520px);
+    min-height: 420px;
+    height: clamp(420px, 64vh, 700px);
   }
 }
 
 @media (max-width: 600px) {
-  .sw-shell {
-    padding: 10px 8px 0;
-  }
-
-  .sw-workspace {
-    width: calc(100vw - 12px);
-    padding: 8px 6px 12px;
-    gap: 10px;
-  }
-
   .sw-title {
     font-size: 18px;
   }
 
+  .sw-topbar {
+    padding: 10px;
+    gap: 8px;
+  }
+
   .sw-topbar .sw-btn {
-    height: 38px;
-    padding: 8px 10px;
+    height: 40px;
+    padding: 9px 10px;
     font-size: 12px;
+  }
+
+  .sw-actions .sw-btn {
+    flex: 1 1 calc(50% - 6px);
   }
 
   .sw-input {
@@ -1124,8 +1151,12 @@ body.sw-exporting .sw-panel:hover {
     font-size: 17px;
   }
 
+  .sw-sizehint {
+    font-size: 12px;
+  }
+
   .sw-preview-pad {
-    min-height: 320px;
-    height: min(54vh, 460px);
+    min-height: 360px;
+    height: clamp(360px, 60vh, 560px);
   }
 }
