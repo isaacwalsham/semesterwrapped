@@ -220,6 +220,8 @@ function SizeHint({ format }) {
 function ExportFrame({ format, children, containerRef }) {
   const { w, h } = getDims(format);
   const [box, setBox] = useState({ width: 520, height: 520 });
+  const headRef = useRef(null);
+  const [headerH, setHeaderH] = useState(44);
 
   useEffect(() => {
     const el = containerRef?.current;
@@ -247,23 +249,45 @@ function ExportFrame({ format, children, containerRef }) {
     return () => ro.disconnect();
   }, [containerRef]);
 
-  const header = 44;
+  useEffect(() => {
+    const el = headRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect?.();
+      if (!rect) return;
+      setHeaderH(Math.max(44, Math.round(rect.height)));
+    };
+
+    update();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [format]);
+
   const pad = 10;
   const availW = Math.max(200, box.width - pad * 2);
-  const availH = Math.max(200, box.height - pad * 2 - header);
+  const availH = Math.max(200, box.height - pad * 2 - headerH);
   const scale = Math.min(1, availW / w, availH / h);
+  const scaledW = Math.round(w * scale);
+  const scaledH = Math.round(h * scale);
 
   return (
     <div className="sw-preview">
-      <div className="sw-preview__head">
+      <div className="sw-preview__head" ref={headRef}>
         <div className="sw-preview__title">Preview</div>
         <SizeHint format={format} />
       </div>
 
       <div className="sw-preview__stage">
-        {}
-        <div style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: "top center" }}>
-          {children}
+        <div style={{ width: scaledW, height: scaledH, display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
+          <div style={{ width: w, height: h, transform: `scale(${scale})`, transformOrigin: "top center" }}>{children}</div>
         </div>
       </div>
     </div>
@@ -534,6 +558,7 @@ function WrappedCard({ state }) {
 export default function SemesterWrappedApp() {
   const [state, setState] = useState(DEFAULTS);
   const [activeTab, setActiveTab] = useState("info");
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const previewBoxRef = useRef(null);
   const previewCardRef = useRef(null);
@@ -545,6 +570,23 @@ export default function SemesterWrappedApp() {
 
   const set = (patch) => setState((s) => ({ ...s, ...patch }));
   const setTheme = (patch) => setState((s) => ({ ...s, theme: { ...s.theme, ...patch } }));
+
+  useEffect(() => {
+    const query = "(max-width: 900px), (hover: none) and (pointer: coarse)";
+    const mql = window.matchMedia(query);
+    const update = () => setIsMobileLayout(!!mql.matches);
+    update();
+    mql.addEventListener?.("change", update);
+    return () => mql.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
+    const root = document.getElementById("root");
+    if (!root) return;
+    if (isMobileLayout) root.classList.add("sw-root--mobile-mode");
+    else root.classList.remove("sw-root--mobile-mode");
+    return () => root.classList.remove("sw-root--mobile-mode");
+  }, [isMobileLayout]);
 
   useEffect(() => {
     if (!state.autoModuleWeights) return;
@@ -765,8 +807,8 @@ export default function SemesterWrappedApp() {
   }
 
   return (
-    <div className="sw-app">
-      <div className="sw-shell">
+    <div className={`sw-app ${isMobileLayout ? "sw-app--mobile-mode" : ""}`}>
+      <div className={`sw-shell ${isMobileLayout ? "sw-shell--mobile-mode" : ""}`}>
         <div className="sw-topbar">
           <div className="sw-brand">
             <div className="sw-title">Semester Wrapped</div>
@@ -800,7 +842,7 @@ export default function SemesterWrappedApp() {
         </div>
       </div>
 
-      <div className="sw-workspace">
+      <div className={`sw-workspace ${isMobileLayout ? "sw-workspace--mobile-mode" : ""}`}>
         {}
         <div className="sw-panel sw-panel--inputs">
           <div className="sw-panel-head">
