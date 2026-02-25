@@ -335,13 +335,13 @@ function WrappedCard({ state }) {
         meta: 18,
         pct: 54,
         cls: 13,
-        sectionTitle: 15,
-        sectionSub: 12,
+        sectionTitle: 16,
+        sectionSub: 13,
         empty: 14,
         footer: 12,
         hashtag: 18,
         footerMax: "64%",
-        breakdownScale: 0.8,
+        breakdownScale: 0.9,
       };
     }
     if (format === "instagram_story") {
@@ -354,13 +354,13 @@ function WrappedCard({ state }) {
         meta: 34,
         pct: 96,
         cls: 22,
-        sectionTitle: 34,
-        sectionSub: 28,
+        sectionTitle: 36,
+        sectionSub: 30,
         empty: 28,
         footer: 52,
         hashtag: 52,
         footerMax: "70%",
-        breakdownScale: 1.18,
+        breakdownScale: 1.24,
       };
     }
     return {
@@ -372,13 +372,13 @@ function WrappedCard({ state }) {
       meta: 28,
       pct: 72,
       cls: 18,
-      sectionTitle: 26,
-      sectionSub: 22,
+      sectionTitle: 28,
+      sectionSub: 24,
       empty: 22,
       footer: 36,
       hashtag: 36,
       footerMax: "72%",
-      breakdownScale: 1,
+      breakdownScale: 1.08,
     };
   }, [format]);
 
@@ -389,15 +389,18 @@ function WrappedCard({ state }) {
     const count = rankedModules.length;
 
     if (count <= 1) {
-      return { rowPadY: 14, rowPadX: 16, rank: 15, code: 24, title: 28, weight: 22, mark: 32 };
+      return { rowPadY: 14, rowPadX: 16, rank: 16, code: 26, title: 30, weight: 24, mark: 34 };
     }
     if (count <= 3) {
-      return { rowPadY: 13, rowPadX: 15, rank: 14, code: 22, title: 24, weight: 20, mark: 28 };
+      return { rowPadY: 13, rowPadX: 15, rank: 15, code: 24, title: 27, weight: 22, mark: 31 };
     }
-    if (count <= 5) {
-      return { rowPadY: 12, rowPadX: 14, rank: 13, code: 20, title: 22, weight: 19, mark: 26 };
+    if (count <= 4) {
+      return { rowPadY: 12, rowPadX: 14, rank: 14, code: 22, title: 25, weight: 21, mark: 29 };
     }
-    return { rowPadY: 10, rowPadX: 12, rank: 12, code: 18, title: 20, weight: 17, mark: 23 };
+    if (count <= 7) {
+      return { rowPadY: 10, rowPadX: 12, rank: 12, code: 19, title: 21, weight: 17, mark: 24 };
+    }
+    return { rowPadY: 8, rowPadX: 10, rank: 11, code: 17, title: 19, weight: 15, mark: 21 };
   }, [rankedModules.length]);
 
   const bg = template === "gradient" ? gradientBg(theme) : theme.bg;
@@ -562,6 +565,7 @@ export default function SemesterWrappedApp() {
 
   const previewBoxRef = useRef(null);
   const previewCardRef = useRef(null);
+  const editorBodyRef = useRef(null);
 
   const [fileName, setFileName] = useState(() => "semester-wrapped");
 
@@ -598,6 +602,19 @@ export default function SemesterWrappedApp() {
     }));
 
   }, [state.autoModuleWeights, state.modules.length]);
+
+  useEffect(() => {
+    const el = editorBodyRef.current;
+    if (!el || activeTab !== "modules") return;
+
+    // Clamp scroll after module list shrinks to avoid blank panel viewport.
+    const raf = requestAnimationFrame(() => {
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      if (el.scrollTop > maxScroll) el.scrollTop = maxScroll;
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [state.modules.length, activeTab]);
 
   const makeEmptyComponent = () => ({
     id: makeId("c"),
@@ -863,7 +880,7 @@ export default function SemesterWrappedApp() {
             </div>
           </div>
 
-          <div className="sw-panel-body">
+          <div className="sw-panel-body" ref={editorBodyRef}>
             {activeTab === "info" ? (
               <div className="sw-form-grid">
                 <Field label="Name">
