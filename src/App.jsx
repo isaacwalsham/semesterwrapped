@@ -77,7 +77,6 @@ function getDims(format) {
   const dims = {
     linkedin_square: { w: 1200, h: 1200, label: "LinkedIn (Square)" },
     instagram_story: { w: 1080, h: 1920, label: "Instagram (Story)" },
-    linkedin_landscape: { w: 1200, h: 628, label: "LinkedIn (Landscape)" },
   };
   return dims[format] || dims.linkedin_square;
 }
@@ -325,25 +324,6 @@ function WrappedCard({ state }) {
   }, [stats.modules]);
 
   const layout = useMemo(() => {
-    if (format === "linkedin_landscape") {
-      return {
-        innerPad: 28,
-        innerGap: 10,
-        headline: 50,
-        name: 26,
-        handle: 16,
-        meta: 18,
-        pct: 54,
-        cls: 13,
-        sectionTitle: 16,
-        sectionSub: 13,
-        empty: 14,
-        footer: 12,
-        hashtag: 18,
-        footerMax: "64%",
-        breakdownScale: 0.9,
-      };
-    }
     if (format === "instagram_story") {
       return {
         innerPad: 62,
@@ -383,7 +363,7 @@ function WrappedCard({ state }) {
   }, [format]);
 
   const scaled = (n) => Math.max(10, Math.round(n * layout.breakdownScale));
-  const assessmentLimit = format === "linkedin_landscape" ? 2 : format === "instagram_story" ? 5 : 3;
+  const assessmentLimit = format === "instagram_story" ? 5 : 3;
 
   const breakdownSizing = useMemo(() => {
     const count = rankedModules.length;
@@ -434,7 +414,7 @@ function WrappedCard({ state }) {
           <div className="sw-card__headline" style={{ fontSize: layout.headline }}>
             {safeText(headline, 42)}
           </div>
-          <div className="sw-card__nameRow" style={{ marginTop: format === "linkedin_landscape" ? 8 : 12 }}>
+          <div className="sw-card__nameRow" style={{ marginTop: 12 }}>
             <div className="sw-card__name" style={{ fontSize: layout.name }}>
               {safeText(personName, 34)}
             </div>
@@ -467,7 +447,7 @@ function WrappedCard({ state }) {
           </div>
         </div>
 
-        <div className="sw-card__breakdown" style={{ marginTop: format === "linkedin_landscape" ? 4 : 10 }}>
+        <div className="sw-card__breakdown" style={{ marginTop: 10 }}>
           <div className="sw-card__sectionHead">
             <div className="sw-card__sectionTitle" style={{ fontSize: layout.sectionTitle, fontWeight: 900 }}>
               Module breakdown
@@ -1145,7 +1125,6 @@ export default function SemesterWrappedApp() {
                   <Field label="Export format">
                     <Select value={state.format} onChange={(e) => set({ format: e.target.value })}>
                       <option value="linkedin_square">LinkedIn square (1200×1200)</option>
-                      <option value="linkedin_landscape">LinkedIn landscape (1200×628)</option>
                       <option value="instagram_story">Instagram story (1080×1920)</option>
                     </Select>
                   </Field>
