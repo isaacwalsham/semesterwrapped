@@ -164,7 +164,8 @@ function sanitizeFileName(name) {
   const cleaned = raw
     .replace(/\.png$/i, "") 
 
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "") // windows-illegal + control chars
+    // eslint-disable-next-line no-control-regex -- strip Windows-illegal + control characters
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -548,6 +549,7 @@ export default function SemesterWrappedApp() {
   const editorBodyRef = useRef(null);
 
   const [fileName, setFileName] = useState(() => "semester-wrapped");
+  const [captionCopied, setCaptionCopied] = useState(false);
 
   const stats = useMemo(() => computeSemester(state.modules), [state.modules]);
   const dims = getDims(state.format);
@@ -722,8 +724,15 @@ export default function SemesterWrappedApp() {
     return caption;
   }
 
-  function copyCaption() {
-    navigator.clipboard?.writeText(buildCaptionText());
+  async function copyCaption() {
+    try {
+      await navigator.clipboard?.writeText(buildCaptionText());
+      setCaptionCopied(true);
+      setTimeout(() => setCaptionCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy caption failed:", err);
+      alert("Couldn't copy caption to clipboard.");
+    }
   }
 
   async function exportPng() {
@@ -833,6 +842,9 @@ export default function SemesterWrappedApp() {
               }}
             >
               Reset
+            </Button>
+            <Button variant="ghost" onClick={copyCaption}>
+              {captionCopied ? "Caption copied!" : "Copy caption"}
             </Button>
             <Button onClick={exportPng}>Export PNG</Button>
           </div>
