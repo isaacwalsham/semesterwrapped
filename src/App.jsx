@@ -3,33 +3,122 @@ import html2canvas from "html2canvas";
 
 const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 
+function makeComponent(patch = {}) {
+  return { id: makeId("c"), type: "Overall", name: "Overall", weight: 100, mark: 0, ...patch };
+}
+
+function makeModule(patch = {}) {
+  return {
+    id: makeId("m"),
+    code: "",
+    title: "",
+    credits: 0,
+    weight: 100,
+    autoComponentWeights: true,
+    components: [makeComponent()],
+    ...patch,
+  };
+}
+
+function makeSemester(patch = {}) {
+  return { id: makeId("s"), label: "Semester 1", modules: [makeModule()], ...patch };
+}
+
+function makeYear(patch = {}) {
+  return {
+    id: makeId("y"),
+    name: "Year 1",
+    calendar: "2025/26",
+    weight: 100,
+    autoModuleWeights: true,
+    semesters: [makeSemester()],
+    ...patch,
+  };
+}
+
 const DEFAULTS = {
   personName: "Your Name",
   university: "Your University",
   course: "BSc Biology",
-  semester: "Semester 1",
-  year: "Year 1 • 2025/26",
-  headline: "My Semester Wrapped",
-  caption: "Proud of my results this semester 🎓",
+  subtitle: "Class of 2026",
+  headline: "My Degree Wrapped",
+  caption: "Proud of how this degree turned out 🎓",
   linkedinHandle: "",
 
   showModuleMarks: true,
   showAssessmentsInBreakdown: true,
+  showYearBreakdown: true,
 
-  autoModuleWeights: true,
-  modules: [
-    {
-      id: makeId("m"),
-      code: "CS301",
-      title: "Machine Learning",
-      credits: 0,
-      weight: 100,
-      autoComponentWeights: true,
-      components: [
-        { id: makeId("c"), type: "Coursework", name: "Coursework 1", weight: 40, mark: 0 },
-        { id: makeId("c"), type: "Exam", name: "Exam", weight: 60, mark: 0 },
+  years: [
+    makeYear({
+      name: "Year 1",
+      calendar: "2024/25",
+      weight: 0,
+      autoModuleWeights: true,
+      semesters: [
+        makeSemester({
+          label: "Semester 1",
+          modules: [
+            makeModule({
+              code: "CS101",
+              title: "Intro to Programming",
+              weight: 100,
+              autoComponentWeights: true,
+              components: [
+                makeComponent({ type: "Coursework", name: "Coursework 1", weight: 40, mark: 0 }),
+                makeComponent({ type: "Exam", name: "Exam", weight: 60, mark: 0 }),
+              ],
+            }),
+          ],
+        }),
       ],
-    },
+    }),
+    makeYear({
+      name: "Year 2",
+      calendar: "2025/26",
+      weight: 40,
+      autoModuleWeights: true,
+      semesters: [
+        makeSemester({
+          label: "Semester 1",
+          modules: [
+            makeModule({
+              code: "CS201",
+              title: "Algorithms",
+              weight: 100,
+              autoComponentWeights: true,
+              components: [
+                makeComponent({ type: "Coursework", name: "Coursework 1", weight: 40, mark: 0 }),
+                makeComponent({ type: "Exam", name: "Exam", weight: 60, mark: 0 }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
+    makeYear({
+      name: "Year 3",
+      calendar: "2026/27",
+      weight: 60,
+      autoModuleWeights: true,
+      semesters: [
+        makeSemester({
+          label: "Semester 1",
+          modules: [
+            makeModule({
+              code: "CS301",
+              title: "Machine Learning",
+              weight: 100,
+              autoComponentWeights: true,
+              components: [
+                makeComponent({ type: "Coursework", name: "Coursework 1", weight: 40, mark: 0 }),
+                makeComponent({ type: "Exam", name: "Exam", weight: 60, mark: 0 }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
   ],
 
   theme: {
@@ -99,7 +188,7 @@ function normalizeWeights(items, key) {
 
 function evenSplit(n) {
   if (n <= 0) return [];
-  const base = Math.floor(10000 / n) / 100; 
+  const base = Math.floor(10000 / n) / 100;
 
   const weights = Array.from({ length: n }, () => base);
   const total = weights.reduce((a, b) => a + b, 0);
@@ -126,7 +215,13 @@ function computeModuleMark(module) {
   return { mark: clampNumber(weighted, 0, 100), weightSum: sumW };
 }
 
-function computeSemester(modules) {
+// Flatten every module that belongs to a year (across all its semesters).
+function yearModules(year) {
+  return (year?.semesters || []).flatMap((s) => s?.modules || []);
+}
+
+// Average over a flat list of modules, normalised by module weight.
+function computeModuleSet(modules) {
   const ms = (modules || []).filter((m) => m && (m.code || m.title || (m.components || []).length));
   if (ms.length === 0) {
     return { avg: NaN, modules: [], best: null, count: 0 };
@@ -153,6 +248,34 @@ function computeSemester(modules) {
   return { avg, modules: withMarks, best, count: withMarks.length };
 }
 
+function computeYear(year) {
+  return computeModuleSet(yearModules(year));
+}
+
+// Combine year averages by their degree weighting into one overall mark.
+function computeDegree(years) {
+  const ys = (years || []).map((y) => {
+    const r = computeYear(y);
+    return { ...y, yearAvg: r.avg, yearCount: r.count, yearModulesWithMarks: r.modules };
+  });
+
+  const contributing = ys.filter((y) => y.yearCount > 0);
+  const norm = normalizeWeights(contributing, "weight");
+  const normById = new Map(norm.map((y) => [y.id, y.__norm || 0]));
+
+  // If no year carries weight, fall back to an equal split so a number still shows.
+  const totalWeight = contributing.reduce((a, y) => a + (Number(y.weight) || 0), 0);
+  const avg = contributing.length
+    ? contributing.reduce((acc, y) => {
+        const mk = Number.isFinite(y.yearAvg) ? y.yearAvg : 0;
+        const share = totalWeight > 0 ? (normById.get(y.id) || 0) / 100 : 1 / contributing.length;
+        return acc + mk * share;
+      }, 0)
+    : NaN;
+
+  return { avg, years: ys, count: contributing.length, totalWeight };
+}
+
 function normalizeHandle(s) {
   const t = String(s || "").trim();
   if (!t) return "";
@@ -162,31 +285,58 @@ function normalizeHandle(s) {
 function sanitizeFileName(name) {
   const raw = String(name || "").trim();
   const cleaned = raw
-    .replace(/\.png$/i, "") 
+    .replace(/\.png$/i, "")
 
     // eslint-disable-next-line no-control-regex -- strip Windows-illegal + control characters
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/[<>:"/\\|?* -]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
-  const safe = cleaned && cleaned.replace(/\./g, "").length ? cleaned : "semester-wrapped";
+  const safe = cleaned && cleaned.replace(/\./g, "").length ? cleaned : "degree-wrapped";
   return safe.slice(0, 80);
 }
+
+// Year-weighting presets. Each returns an array of weights for `n` years.
+const YEAR_PRESETS = [
+  { id: "equal", label: "Equal", build: (n) => evenSplit(n) },
+  {
+    id: "final",
+    label: "Final year only",
+    build: (n) => Array.from({ length: n }, (_, i) => (i === n - 1 ? 100 : 0)),
+  },
+  {
+    id: "uk",
+    label: "Standard UK",
+    build: (n) => {
+      if (n <= 1) return [100];
+      if (n === 2) return [40, 60];
+      // First years contribute 0; final two carry 40 / 60.
+      return Array.from({ length: n }, (_, i) => {
+        if (i === n - 1) return 60;
+        if (i === n - 2) return 40;
+        return 0;
+      });
+    },
+  },
+  {
+    id: "meng",
+    label: "Integrated (last 3)",
+    build: (n) => {
+      if (n < 3) return evenSplit(n);
+      return Array.from({ length: n }, (_, i) => {
+        if (i === n - 1) return 40;
+        if (i === n - 2) return 40;
+        if (i === n - 3) return 20;
+        return 0;
+      });
+    },
+  },
+];
 
 function Field({ label, children }) {
   return (
     <label style={{ display: "block" }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 850,
-          letterSpacing: "-0.01em",
-          opacity: 0.78,
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </div>
+      <div className="sw-fieldLabel">{label}</div>
       {children}
     </label>
   );
@@ -207,9 +357,9 @@ function Button({ variant = "primary", ...props }) {
 function SizeHint({ format }) {
   const f = getDims(format);
   return (
-    <div className="sw-sizehint" style={{ fontSize: 15 }}>
+    <div className="sw-sizehint">
       Export size:{" "}
-      <span className="sw-sizehint__pill" style={{ fontSize: 14 }}>
+      <span className="sw-sizehint__pill">
         {f.w}×{f.h}
       </span>{" "}
       <span className="sw-sizehint__muted">— {f.label}</span>
@@ -297,32 +447,51 @@ function ExportFrame({ format, children, containerRef }) {
 function WrappedCard({ state }) {
   const {
     theme,
-    modules,
+    years,
     headline,
     caption,
     personName,
     university,
     course,
-    semester,
-    year,
+    subtitle,
     format,
     template,
     linkedinHandle,
     showModuleMarks,
     showAssessmentsInBreakdown,
+    showYearBreakdown,
   } = state;
 
-  const stats = useMemo(() => computeSemester(modules), [modules]);
-  const cls = getUkClassification(stats.avg);
+  const degree = useMemo(() => computeDegree(years), [years]);
+  const cls = getUkClassification(degree.avg);
 
   const handleLine = useMemo(() => {
     const li = normalizeHandle(linkedinHandle);
     return li ? `LinkedIn - ${li}` : "";
   }, [linkedinHandle]);
 
-  const rankedModules = useMemo(() => {
-    return (stats.modules || []).slice().sort((a, b) => (Number(b.moduleMark) || 0) - (Number(a.moduleMark) || 0));
-  }, [stats.modules]);
+  // When only one year exists, show its modules; otherwise show a per-year breakdown.
+  const singleYear = (years || []).length <= 1;
+
+  const moduleRows = useMemo(() => {
+    if (!singleYear) return [];
+    const set = computeModuleSet(yearModules((years || [])[0] || {}));
+    return (set.modules || []).slice().sort((a, b) => (Number(b.moduleMark) || 0) - (Number(a.moduleMark) || 0));
+  }, [years, singleYear]);
+
+  const yearRows = useMemo(() => {
+    return (degree.years || []).map((y) => ({
+      id: y.id,
+      name: y.name,
+      calendar: y.calendar,
+      weight: y.weight,
+      avg: y.yearAvg,
+      count: y.yearCount,
+    }));
+  }, [degree.years]);
+
+  const useYearBreakdown = !singleYear && showYearBreakdown;
+  const rowCount = useYearBreakdown ? yearRows.length : moduleRows.length;
 
   const layout = useMemo(() => {
     if (format === "instagram_story") {
@@ -367,7 +536,7 @@ function WrappedCard({ state }) {
   const assessmentLimit = format === "instagram_story" ? 5 : 3;
 
   const breakdownSizing = useMemo(() => {
-    const count = rankedModules.length;
+    const count = rowCount;
 
     if (count <= 1) {
       return { rowPadY: 14, rowPadX: 16, rank: 16, code: 26, title: 30, weight: 24, mark: 34 };
@@ -382,9 +551,13 @@ function WrappedCard({ state }) {
       return { rowPadY: 10, rowPadX: 12, rank: 12, code: 19, title: 21, weight: 17, mark: 24 };
     }
     return { rowPadY: 8, rowPadX: 10, rank: 11, code: 17, title: 19, weight: 15, mark: 21 };
-  }, [rankedModules.length]);
+  }, [rowCount]);
 
   const bg = template === "gradient" ? gradientBg(theme) : theme.bg;
+
+  const metaSecond = useYearBreakdown
+    ? `${(years || []).length} years${subtitle ? ` • ${safeText(subtitle, 24)}` : ""}`
+    : safeText(subtitle, 30);
 
   return (
     <div
@@ -431,19 +604,21 @@ function WrappedCard({ state }) {
               <span className="sw-card__dot">•</span>
               <span className="sw-card__metaMuted">{safeText(course, 48)}</span>
             </div>
-            <div className="sw-card__metaLine">
-              <span className="sw-card__metaMuted">{safeText(semester, 18)}</span>
-              <span className="sw-card__dot">•</span>
-              <span className="sw-card__metaMuted">{safeText(year, 16)}</span>
-            </div>
+            {metaSecond ? (
+              <div className="sw-card__metaLine">
+                <span className="sw-card__metaMuted">{metaSecond}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="sw-card__gradeRow">
             <div className="sw-card__pct" style={{ fontSize: layout.pct }}>
-              {stats.count ? formatPct(stats.avg) : "—"}
+              {degree.count ? formatPct(degree.avg) : "—"}
             </div>
             <div className="sw-card__class" style={{ fontSize: layout.cls }}>
-              {stats.count ? cls.label : "Add modules to calculate"}
+              {degree.count
+                ? `${useYearBreakdown ? "Overall degree" : "Overall"} • ${cls.label}`
+                : "Add modules to calculate"}
             </div>
           </div>
         </div>
@@ -451,20 +626,66 @@ function WrappedCard({ state }) {
         <div className="sw-card__breakdown" style={{ marginTop: 10 }}>
           <div className="sw-card__sectionHead">
             <div className="sw-card__sectionTitle" style={{ fontSize: layout.sectionTitle, fontWeight: 900 }}>
-              Module breakdown
+              {useYearBreakdown ? "Year breakdown" : "Module breakdown"}
             </div>
             <div className="sw-card__sectionSub" style={{ fontSize: layout.sectionSub, opacity: 0.85 }}>
-              Ranked by module mark
+              {useYearBreakdown ? "Weighted toward your degree" : "Ranked by module mark"}
             </div>
           </div>
 
           <div className="sw-card__list">
-            {rankedModules.length === 0 ? (
+            {rowCount === 0 ? (
               <div className="sw-card__empty" style={{ fontSize: layout.empty, opacity: 0.85 }}>
                 Add modules and assessments to populate your wrap.
               </div>
+            ) : useYearBreakdown ? (
+              yearRows.map((y, i) => {
+                const yCls = getUkClassification(y.avg);
+                return (
+                  <div
+                    key={y.id || i}
+                    className="sw-card__row"
+                    style={{
+                      background: hexAlpha(theme.card, 0.55),
+                      border: `1px solid ${hexAlpha(theme.text, 0.08)}`,
+                      padding: `${scaled(breakdownSizing.rowPadY)}px ${scaled(breakdownSizing.rowPadX)}px`,
+                    }}
+                  >
+                    <div className="sw-card__rank" style={{ fontSize: scaled(breakdownSizing.rank) }}>
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+
+                    <div className="sw-card__rowMain">
+                      <div className="sw-card__rowTop">
+                        <div className="sw-card__code" style={{ fontSize: scaled(breakdownSizing.code), fontWeight: 800 }}>
+                          {safeText(y.calendar || "", 12)}
+                        </div>
+                      </div>
+                      <div className="sw-card__title" style={{ fontSize: scaled(breakdownSizing.title), fontWeight: 900, lineHeight: 1.2 }}>
+                        {safeText(y.name || `Year ${i + 1}`, 28)}
+                      </div>
+                      <div className="sw-card__assessList" style={{ marginTop: scaled(4) }}>
+                        <div className="sw-card__assessItem" style={{ fontSize: scaled(12) }}>
+                          <span className="sw-card__assessName">{y.count ? yCls.label : "No marks yet"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="sw-card__rowRight">
+                      <div className="sw-card__weight" style={{ fontSize: scaled(breakdownSizing.weight) }}>
+                        {`${Math.round(Number(y.weight) || 0)}%`}
+                      </div>
+                      {showModuleMarks ? (
+                        <div className="sw-card__mark" style={{ fontSize: scaled(breakdownSizing.mark) }}>
+                          {y.count ? formatPct(Number(y.avg)) : "—"}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
-              rankedModules.map((m, i) => (
+              moduleRows.map((m, i) => (
                 <div
                   key={m.id || `${m.code}-${i}`}
                   className="sw-card__row"
@@ -531,7 +752,7 @@ function WrappedCard({ state }) {
             {caption ? safeText(caption, 84) : ""}
           </div>
           <div className="sw-card__footerRight" style={{ color: theme.primary, fontSize: layout.hashtag, fontWeight: 900 }}>
-            #SemesterWrapped
+            #DegreeWrapped
           </div>
         </div>
       </div>
@@ -542,20 +763,28 @@ function WrappedCard({ state }) {
 export default function SemesterWrappedApp() {
   const [state, setState] = useState(DEFAULTS);
   const [activeTab, setActiveTab] = useState("info");
+  const [activeYearIdx, setActiveYearIdx] = useState(0);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const previewBoxRef = useRef(null);
   const previewCardRef = useRef(null);
   const editorBodyRef = useRef(null);
 
-  const [fileName, setFileName] = useState(() => "semester-wrapped");
+  const [fileName, setFileName] = useState(() => "degree-wrapped");
   const [captionCopied, setCaptionCopied] = useState(false);
 
-  const stats = useMemo(() => computeSemester(state.modules), [state.modules]);
+  const degree = useMemo(() => computeDegree(state.years), [state.years]);
   const dims = getDims(state.format);
 
   const set = (patch) => setState((s) => ({ ...s, ...patch }));
   const setTheme = (patch) => setState((s) => ({ ...s, theme: { ...s.theme, ...patch } }));
+
+  // Keep active year index valid as years are added/removed.
+  const safeYearIdx = Math.min(activeYearIdx, Math.max(0, state.years.length - 1));
+  useEffect(() => {
+    if (safeYearIdx !== activeYearIdx) setActiveYearIdx(safeYearIdx);
+  }, [safeYearIdx, activeYearIdx]);
+  const activeYear = state.years[safeYearIdx] || state.years[0];
 
   useEffect(() => {
     const query = "(max-width: 900px), (hover: none) and (pointer: coarse)";
@@ -574,154 +803,179 @@ export default function SemesterWrappedApp() {
     return () => root.classList.remove("sw-root--mobile-mode");
   }, [isMobileLayout]);
 
+  // Auto-split module weights (per year) whenever a year's module count changes.
+  const autoWeightSig = state.years
+    .map((y) => (y.autoModuleWeights ? yearModules(y).length : -1))
+    .join("|");
   useEffect(() => {
-    if (!state.autoModuleWeights) return;
-    const n = state.modules.length;
-    const weights = evenSplit(n);
-    setState((s) => ({
-      ...s,
-      modules: s.modules.map((m, i) => ({ ...m, weight: weights[i] ?? 0 })),
-    }));
+    setState((s) => {
+      let changed = false;
+      const years = s.years.map((y) => {
+        if (!y.autoModuleWeights) return y;
+        const flat = yearModules(y);
+        const weights = evenSplit(flat.length);
+        let k = 0;
+        const semesters = y.semesters.map((sem) => ({
+          ...sem,
+          modules: (sem.modules || []).map((m) => {
+            const w = weights[k++] ?? 0;
+            if (m.weight !== w) changed = true;
+            return m.weight === w ? m : { ...m, weight: w };
+          }),
+        }));
+        return { ...y, semesters };
+      });
+      return changed ? { ...s, years } : s;
+    });
+  }, [autoWeightSig]);
 
-  }, [state.autoModuleWeights, state.modules.length]);
-
-  useEffect(() => {
-    const el = editorBodyRef.current;
-    if (!el || activeTab !== "modules") return;
-
-    // Clamp scroll after module list shrinks to avoid blank panel viewport.
-    const raf = requestAnimationFrame(() => {
-      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-      if (el.scrollTop > maxScroll) el.scrollTop = maxScroll;
+  // ---- Year mutations ----
+  const updateYear = (yIdx, patch) =>
+    setState((s) => {
+      const years = s.years.slice();
+      years[yIdx] = { ...years[yIdx], ...patch };
+      return { ...s, years };
     });
 
-    return () => cancelAnimationFrame(raf);
-  }, [state.modules.length, activeTab]);
-
-  const makeEmptyComponent = () => ({
-    id: makeId("c"),
-    type: "Overall",
-    name: "Overall",
-    weight: 100,
-    mark: 0,
-  });
-
-  const makeEmptyModule = () => ({
-    id: makeId("m"),
-    code: "",
-    title: "",
-    credits: 0,
-    weight: 100,
-    autoComponentWeights: true,
-    components: [makeEmptyComponent()],
-  });
-
-  const addModule = () =>
-    setState((s) => ({
-      ...s,
-      modules: [...s.modules, makeEmptyModule()],
-    }));
-
-  const updateModule = (idx, patch) =>
+  const addYear = () =>
     setState((s) => {
-      const modules = s.modules.slice();
-      modules[idx] = { ...modules[idx], ...patch };
-      return { ...s, modules };
+      const n = s.years.length + 1;
+      const years = [...s.years, makeYear({ name: `Year ${n}`, calendar: "", weight: 0 })];
+      return { ...s, years };
     });
 
-  const removeModule = (idx) =>
+  const removeYear = (yIdx) =>
     setState((s) => {
-      const next = s.modules.filter((_, i) => i !== idx);
-      return { ...s, modules: next.length ? next : [makeEmptyModule()] };
+      const next = s.years.filter((_, i) => i !== yIdx);
+      return { ...s, years: next.length ? next : [makeYear()] };
     });
 
-  const addComponent = (moduleIdx) => {
+  const applyYearPreset = (preset) =>
     setState((s) => {
-      const modules = s.modules.slice();
-      const m = modules[moduleIdx];
+      const weights = preset.build(s.years.length);
+      return { ...s, years: s.years.map((y, i) => ({ ...y, weight: weights[i] ?? 0 })) };
+    });
 
-      const nextComp = {
-        id: makeId("c"),
-        type: "Assignment",
-        name: "Assignment",
-        weight: 0,
-        mark: 0,
-      };
+  // ---- Semester mutations ----
+  const updateSemester = (yIdx, semIdx, patch) =>
+    setState((s) => {
+      const years = s.years.slice();
+      const y = years[yIdx];
+      const semesters = y.semesters.slice();
+      semesters[semIdx] = { ...semesters[semIdx], ...patch };
+      years[yIdx] = { ...y, semesters };
+      return { ...s, years };
+    });
 
+  const addSemester = (yIdx) =>
+    setState((s) => {
+      const years = s.years.slice();
+      const y = years[yIdx];
+      const label = `Semester ${y.semesters.length + 1}`;
+      years[yIdx] = { ...y, semesters: [...y.semesters, makeSemester({ label, modules: [makeModule()] })] };
+      return { ...s, years };
+    });
+
+  const removeSemester = (yIdx, semIdx) =>
+    setState((s) => {
+      const years = s.years.slice();
+      const y = years[yIdx];
+      const next = y.semesters.filter((_, i) => i !== semIdx);
+      years[yIdx] = { ...y, semesters: next.length ? next : [makeSemester()] };
+      return { ...s, years };
+    });
+
+  // ---- Module mutations ----
+  const mutateModules = (yIdx, semIdx, fn) =>
+    setState((s) => {
+      const years = s.years.slice();
+      const y = years[yIdx];
+      const semesters = y.semesters.slice();
+      const sem = semesters[semIdx];
+      semesters[semIdx] = { ...sem, modules: fn(sem.modules || []) };
+      years[yIdx] = { ...y, semesters };
+      return { ...s, years };
+    });
+
+  const addModule = (yIdx, semIdx) => mutateModules(yIdx, semIdx, (mods) => [...mods, makeModule()]);
+
+  const updateModule = (yIdx, semIdx, modIdx, patch) =>
+    mutateModules(yIdx, semIdx, (mods) => mods.map((m, i) => (i === modIdx ? { ...m, ...patch } : m)));
+
+  const removeModule = (yIdx, semIdx, modIdx) =>
+    mutateModules(yIdx, semIdx, (mods) => {
+      const next = mods.filter((_, i) => i !== modIdx);
+      return next.length ? next : [makeModule()];
+    });
+
+  // ---- Component (assessment) mutations ----
+  const mutateModule = (yIdx, semIdx, modIdx, fn) =>
+    mutateModules(yIdx, semIdx, (mods) => mods.map((m, i) => (i === modIdx ? fn(m) : m)));
+
+  const addComponent = (yIdx, semIdx, modIdx) =>
+    mutateModule(yIdx, semIdx, modIdx, (m) => {
+      const nextComp = makeComponent({ type: "Assignment", name: "Assignment", weight: 0 });
       const next = { ...m, components: [...(m.components || []), nextComp] };
-
       if (next.autoComponentWeights) {
         const weights = evenSplit(next.components.length);
         next.components = next.components.map((c, i) => ({ ...c, weight: weights[i] ?? 0 }));
       }
-
-      modules[moduleIdx] = next;
-      return { ...s, modules };
+      return next;
     });
-  };
 
-  const updateComponent = (moduleIdx, compIdx, patch) => {
-    setState((s) => {
-      const modules = s.modules.slice();
-      const m = modules[moduleIdx];
+  const updateComponent = (yIdx, semIdx, modIdx, compIdx, patch) =>
+    mutateModule(yIdx, semIdx, modIdx, (m) => {
       const components = (m.components || []).slice();
       components[compIdx] = { ...components[compIdx], ...patch };
-      modules[moduleIdx] = { ...m, components };
-      return { ...s, modules };
+      return { ...m, components };
     });
-  };
 
-  const removeComponent = (moduleIdx, compIdx) => {
-    setState((s) => {
-      const modules = s.modules.slice();
-      const m = modules[moduleIdx];
+  const removeComponent = (yIdx, semIdx, modIdx, compIdx) =>
+    mutateModule(yIdx, semIdx, modIdx, (m) => {
       const nextComps = (m.components || []).filter((_, i) => i !== compIdx);
-      const ensured = nextComps.length ? nextComps : [makeEmptyComponent()];
-
-      let nextModule = { ...m, components: ensured };
-      if (nextModule.autoComponentWeights) {
-        const weights = evenSplit(nextModule.components.length);
-        nextModule.components = nextModule.components.map((c, i) => ({ ...c, weight: weights[i] ?? 0 }));
+      const ensured = nextComps.length ? nextComps : [makeComponent()];
+      let next = { ...m, components: ensured };
+      if (next.autoComponentWeights) {
+        const weights = evenSplit(next.components.length);
+        next.components = next.components.map((c, i) => ({ ...c, weight: weights[i] ?? 0 }));
       }
-
-      modules[moduleIdx] = nextModule;
-      return { ...s, modules };
+      return next;
     });
-  };
 
-  const setAutoComponentWeights = (moduleIdx, enabled) => {
-    setState((s) => {
-      const modules = s.modules.slice();
-      const m = modules[moduleIdx];
+  const setAutoComponentWeights = (yIdx, semIdx, modIdx, enabled) =>
+    mutateModule(yIdx, semIdx, modIdx, (m) => {
       let next = { ...m, autoComponentWeights: enabled };
-
       if (enabled) {
         const weights = evenSplit((next.components || []).length);
         next.components = (next.components || []).map((c, i) => ({ ...c, weight: weights[i] ?? 0 }));
       }
-
-      modules[moduleIdx] = next;
-      return { ...s, modules };
+      return next;
     });
-  };
 
   function buildCaptionText() {
-    const cls = getUkClassification(stats.avg);
+    const cls = getUkClassification(degree.avg);
     const linkedInLine = state.linkedinHandle ? `LinkedIn: ${normalizeHandle(state.linkedinHandle)}` : "";
 
-    const caption =
-      `📚 ${state.headline}\n` +
+    const yearLines = degree.years
+      .map((y) => {
+        const yc = getUkClassification(y.yearAvg);
+        const mark = y.yearCount ? formatPct(y.yearAvg) : "–";
+        return `• ${y.name}${y.calendar ? ` (${y.calendar})` : ""}: ${mark}${y.yearCount ? ` ${yc.short}` : ""} — ${Math.round(Number(y.weight) || 0)}% of degree`;
+      })
+      .join("\n");
+
+    return (
+      `🎓 ${state.headline}\n` +
       `${state.personName}\n` +
       `${state.university} • ${state.course}\n` +
-      `${state.semester} • ${state.year}\n\n` +
-      `Results:\n` +
-      `• Semester average: ${stats.count ? formatPct(stats.avg) : "–"}\n` +
-      `• Classification: ${stats.count ? cls.label : "–"}\n` +
-      `• Modules: ${stats.count}\n` +
+      (state.subtitle ? `${state.subtitle}\n` : "") +
+      `\n` +
+      `Overall: ${degree.count ? formatPct(degree.avg) : "–"}${degree.count ? ` • ${cls.label}` : ""}\n` +
+      `\n` +
+      `${yearLines}\n` +
       (linkedInLine ? `\n${linkedInLine}\n` : "\n") +
-      `#SemesterWrapped #university #students`;
-
-    return caption;
+      `#DegreeWrapped #university #students`
+    );
   }
 
   async function copyCaption() {
@@ -812,16 +1066,17 @@ export default function SemesterWrappedApp() {
     }
   }
 
+  const yIdx = safeYearIdx;
+
   return (
     <div className={`sw-app ${isMobileLayout ? "sw-app--mobile-mode" : ""}`}>
       <div className={`sw-shell ${isMobileLayout ? "sw-shell--mobile-mode" : ""}`}>
         <div className="sw-topbar">
           <div className="sw-brand">
-            <div className="sw-title">Semester Wrapped</div>
+            <div className="sw-title">Degree Wrapped</div>
           </div>
 
           <div className="sw-actions">
-            {}
             <div className="sw-file">
               <div className="sw-file__label">Filename</div>
               <div className="sw-file__row">
@@ -829,7 +1084,7 @@ export default function SemesterWrappedApp() {
                   className="sw-input sw-file__input"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
-                  placeholder="semester-wrapped"
+                  placeholder="degree-wrapped"
                 />
               </div>
             </div>
@@ -838,7 +1093,8 @@ export default function SemesterWrappedApp() {
               onClick={() => {
                 setState(DEFAULTS);
                 setActiveTab("info");
-                setFileName("semester-wrapped");
+                setActiveYearIdx(0);
+                setFileName("degree-wrapped");
               }}
             >
               Reset
@@ -852,7 +1108,6 @@ export default function SemesterWrappedApp() {
       </div>
 
       <div className={`sw-workspace ${isMobileLayout ? "sw-workspace--mobile-mode" : ""}`}>
-        {}
         <div className="sw-panel sw-panel--inputs">
           <div className="sw-panel-head">
             <div>
@@ -863,8 +1118,8 @@ export default function SemesterWrappedApp() {
               <button className={`sw-tab ${activeTab === "info" ? "is-active" : ""}`} onClick={() => setActiveTab("info")} type="button">
                 Info
               </button>
-              <button className={`sw-tab ${activeTab === "modules" ? "is-active" : ""}`} onClick={() => setActiveTab("modules")} type="button">
-                Modules
+              <button className={`sw-tab ${activeTab === "grades" ? "is-active" : ""}`} onClick={() => setActiveTab("grades")} type="button">
+                Grades
               </button>
               <button className={`sw-tab ${activeTab === "design" ? "is-active" : ""}`} onClick={() => setActiveTab("design")} type="button">
                 Design
@@ -884,12 +1139,8 @@ export default function SemesterWrappedApp() {
                 <Field label="Course / Degree">
                   <Input value={state.course} onChange={(e) => set({ course: e.target.value })} />
                 </Field>
-
-                <Field label="Semester">
-                  <Input value={state.semester} onChange={(e) => set({ semester: e.target.value })} placeholder="Semester 1" />
-                </Field>
-                <Field label="Course year (e.g., Year 1 • 2025/26)">
-                  <Input value={state.year} onChange={(e) => set({ year: e.target.value })} placeholder="Year 1 • 2025/26" />
+                <Field label="Subtitle (e.g. Class of 2026)">
+                  <Input value={state.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="Class of 2026" />
                 </Field>
 
                 <Field label="Headline">
@@ -906,212 +1157,361 @@ export default function SemesterWrappedApp() {
 
                 <div className="sw-inlineCard">
                   <div className="sw-inlineCard__top">
-                    <div className="sw-inlineCard__title">Live result</div>
+                    <div className="sw-inlineCard__title">Overall degree</div>
                     <div className="sw-inlineCard__pill">
-                      {stats.count ? `${formatPct(stats.avg)} • ${getUkClassification(stats.avg).label}` : "Add modules to calculate"}
+                      {degree.count ? `${formatPct(degree.avg)} • ${getUkClassification(degree.avg).label}` : "Add modules to calculate"}
                     </div>
                   </div>
                 </div>
               </div>
             ) : null}
 
-            {activeTab === "modules" ? (
+            {activeTab === "grades" ? (
               <div className="sw-section">
+                {/* Degree weighting */}
+                <div className="sw-inlineCard">
+                  <div className="sw-inlineCard__top">
+                    <div className="sw-inlineCard__title">Degree weighting</div>
+                    <div className="sw-inlineCard__pill">
+                      {degree.count ? `${formatPct(degree.avg)} • ${getUkClassification(degree.avg).label}` : "—"}
+                    </div>
+                  </div>
+                  <div className="sw-inlineCard__sub">How much each year counts toward your final classification.</div>
+
+                  <div className="sw-presetRow">
+                    {YEAR_PRESETS.map((p) => (
+                      <Button key={p.id} variant="ghost" className="sw-btn--sm sw-preset" onClick={() => applyYearPreset(p)}>
+                        {p.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="sw-weightTable">
+                    {state.years.map((y, i) => (
+                      <div className="sw-weightRow" key={y.id || i}>
+                        <div className="sw-weightRow__name">
+                          <span className="sw-weightRow__title">{y.name || `Year ${i + 1}`}</span>
+                          <span className="sw-weightRow__meta">
+                            {(() => {
+                              const r = computeYear(y);
+                              return r.count ? `${formatPct(r.avg)} • ${getUkClassification(r.avg).short}` : "No marks yet";
+                            })()}
+                          </span>
+                        </div>
+                        <div className="sw-weightRow__input">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={String(y.weight ?? "")}
+                            onChange={(e) => updateYear(i, { weight: clampNumber(Number(e.target.value), 0, 100) })}
+                          />
+                          <span className="sw-weightRow__pct">%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {degree.totalWeight === 0 ? (
+                    <div className="sw-inlineCard__sub" style={{ marginTop: 10 }}>
+                      All weights are 0 — years are currently averaged equally. Pick a preset or set weights above.
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Year selector */}
                 <div className="sw-sectionHead">
                   <div>
-                    <div className="sw-sectionTitle">Modules</div>
+                    <div className="sw-sectionTitle">Years</div>
                   </div>
-                  <Button variant="ghost" onClick={addModule}>
-                    + Add module
+                  <Button variant="ghost" onClick={addYear}>
+                    + Add year
                   </Button>
                 </div>
 
-                <div className="sw-inlineCard sw-inlineCard--row">
-                  <div>
-                    <div className="sw-inlineCard__title">Auto module weights</div>
-                    <div className="sw-inlineCard__sub">Splits modules equally and updates automatically.</div>
-                  </div>
-                  <label className="sw-toggle">
-                    <input type="checkbox" checked={state.autoModuleWeights} onChange={(e) => set({ autoModuleWeights: e.target.checked })} />
-                    <span>{state.autoModuleWeights ? "On" : "Off"}</span>
-                  </label>
+                <div className="sw-yearTabs">
+                  {state.years.map((y, i) => (
+                    <button
+                      key={y.id || i}
+                      type="button"
+                      className={`sw-yearTab ${i === yIdx ? "is-active" : ""}`}
+                      onClick={() => setActiveYearIdx(i)}
+                    >
+                      {y.name || `Year ${i + 1}`}
+                    </button>
+                  ))}
                 </div>
 
-                <div className="sw-modules">
-                  {state.modules.map((m, idx) => {
-                    const modCalc = computeModuleMark(m);
-                    const modMark = Number.isFinite(modCalc.mark) ? modCalc.mark : 0;
-                    const compSum = (m.components || []).reduce((a, c) => a + (Number(c.weight) || 0), 0);
+                {activeYear ? (
+                  <div className="sw-yearEditor">
+                    <div className="sw-grid2">
+                      <Field label="Year name">
+                        <Input value={activeYear.name} onChange={(e) => updateYear(yIdx, { name: e.target.value })} placeholder="e.g., Year 1" />
+                      </Field>
+                      <Field label="Academic year (optional)">
+                        <Input value={activeYear.calendar} onChange={(e) => updateYear(yIdx, { calendar: e.target.value })} placeholder="e.g., 2025/26" />
+                      </Field>
+                    </div>
 
-                    return (
-                      <details key={m.id || idx} className="sw-accordion" open={idx === 0}>
-                        <summary className="sw-accordion__summary">
-                          <div className="sw-accordion__left">
-                            <div className="sw-accordion__title">
-                              {(m.code || `Module ${idx + 1}`) + (m.title ? ` — ${m.title}` : "")}
-                            </div>
-                            <div className="sw-accordion__meta">
-                              {state.autoModuleWeights ? "Auto weights" : `${Math.round(Number(m.weight) || 0)}% of semester`} •{" "}
-                              {(m.components || []).length} assessments
-                            </div>
-                          </div>
+                    <div className="sw-inlineCard sw-inlineCard--row" style={{ marginTop: 12 }}>
+                      <div>
+                        <div className="sw-inlineCard__title">Auto module weights</div>
+                        <div className="sw-inlineCard__sub">Splits all modules in this year equally.</div>
+                      </div>
+                      <label className="sw-toggle">
+                        <input
+                          type="checkbox"
+                          checked={!!activeYear.autoModuleWeights}
+                          onChange={(e) => updateYear(yIdx, { autoModuleWeights: e.target.checked })}
+                        />
+                        <span>{activeYear.autoModuleWeights ? "On" : "Off"}</span>
+                      </label>
+                    </div>
 
-                          <div className="sw-accordion__right">
-                            <div className="sw-accordion__mark">{formatPct(modMark)}</div>
-                          </div>
-                        </summary>
+                    <div className="sw-assessHead" style={{ marginTop: 14 }}>
+                      <div>
+                        <div className="sw-sectionTitle" style={{ fontSize: 15 }}>
+                          Semesters
+                        </div>
+                        <div className="sw-sectionSub">Group this year's modules.</div>
+                      </div>
+                      <Button variant="ghost" onClick={() => addSemester(yIdx)}>
+                        + Add semester
+                      </Button>
+                    </div>
 
-                        <div className="sw-accordion__body">
-                          <div className="sw-grid2">
-                            <Field label="Module code">
-                              <Input value={m.code} onChange={(e) => updateModule(idx, { code: e.target.value })} placeholder="e.g., CS301" />
-                            </Field>
-                            <Field label="Title">
-                              <Input value={m.title} onChange={(e) => updateModule(idx, { title: e.target.value })} placeholder="e.g., Machine Learning" />
-                            </Field>
-                            <Field label="Weight (% of semester)">
-                              <Input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={String(m.weight ?? "")}
-                                disabled={state.autoModuleWeights}
-                                onChange={(e) => updateModule(idx, { weight: clampNumber(Number(e.target.value), 0, 100) })}
-                              />
-                            </Field>
-                            <Field label="Credits (optional)">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={String(m.credits ?? "")}
-                                onChange={(e) => updateModule(idx, { credits: clampNumber(Number(e.target.value), 0, 200) })}
-                              />
-                            </Field>
-                          </div>
-
-                          <div className="sw-inlineCard sw-inlineCard--row" style={{ marginTop: 12 }}>
-                            <div>
-                              <div className="sw-inlineCard__title">Calculated module mark</div>
-                              <div className="sw-inlineCard__sub">Assessment weights sum: {Math.round(compSum)}%</div>
-                            </div>
-                            <div className="sw-inlineCard__pill">{formatPct(modMark)}</div>
-                          </div>
-
-                          <div className="sw-assessHead">
-                            <div>
-                              <div className="sw-sectionTitle" style={{ fontSize: 14 }}>
-                                Assessments
+                    <div className="sw-modules">
+                      {activeYear.semesters.map((sem, semIdx) => {
+                        const semSet = computeModuleSet(sem.modules || []);
+                        return (
+                          <details key={sem.id || semIdx} className="sw-accordion" open={semIdx === 0}>
+                            <summary className="sw-accordion__summary">
+                              <div className="sw-accordion__left">
+                                <div className="sw-accordion__title">{sem.label || `Semester ${semIdx + 1}`}</div>
+                                <div className="sw-accordion__meta">{(sem.modules || []).length} modules</div>
                               </div>
-                              <div className="sw-sectionSub">Weights contribute to the module mark.</div>
-                            </div>
-                            <div className="sw-assessHead__right">
-                              <label className="sw-toggle">
-                                <input type="checkbox" checked={!!m.autoComponentWeights} onChange={(e) => setAutoComponentWeights(idx, e.target.checked)} />
-                                <span>Auto weights</span>
-                              </label>
-                              <Button variant="ghost" className="sw-assessAdd" onClick={() => addComponent(idx)}>
-                                + Add
-                              </Button>
-                            </div>
-                          </div>
+                              <div className="sw-accordion__right">
+                                <div className="sw-accordion__mark">{semSet.count ? formatPct(semSet.avg) : "—"}</div>
+                              </div>
+                            </summary>
 
-                          <div className="sw-components">
-                            {(m.components || []).map((c, cIdx) => (
-                              <details key={c.id || cIdx} className="sw-subaccordion" open={cIdx === 0}>
-                                <summary className="sw-subaccordion__summary">
-                                  <div className="sw-subaccordion__left">
-                                    <div className="sw-subaccordion__title">{c.name || c.type || `Assessment ${cIdx + 1}`}</div>
-                                    <div className="sw-subaccordion__meta">
-                                      {c.type} • {Math.round(Number(c.weight) || 0)}%
-                                    </div>
-                                  </div>
-                                  <div className="sw-subaccordion__right">
-                                    <div className="sw-subaccordion__mark">{formatPct(Number(c.mark))}</div>
-                                  </div>
-                                </summary>
+                            <div className="sw-accordion__body">
+                              <Field label="Semester label">
+                                <Input
+                                  value={sem.label}
+                                  onChange={(e) => updateSemester(yIdx, semIdx, { label: e.target.value })}
+                                  placeholder="e.g., Semester 1"
+                                />
+                              </Field>
+                              {activeYear.semesters.length > 1 ? (
+                                <div className="sw-removeRow">
+                                  <Button variant="danger" className="sw-btn--sm" onClick={() => removeSemester(yIdx, semIdx)}>
+                                    <span className="sw-btn__icon" aria-hidden="true">✕</span>
+                                    Remove semester
+                                  </Button>
+                                </div>
+                              ) : null}
 
-                                <div className="sw-subaccordion__body">
-                                  <div
-                                    className="sw-grid5"
-                                    style={{
-                                      display: "grid",
-                                      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                                      gap: 14,
-                                      alignItems: "end",
-                                    }}
-                                  >
-                                    <Field label="Type">
-                                      <Select
-                                        value={c.type}
-                                        onChange={(e) => {
-                                          const v = e.target.value;
-                                          updateComponent(idx, cIdx, { type: v, name: c.name === c.type ? v : c.name });
-                                        }}
-                                        className="sw-minType"
-                                      >
-                                        <option value="Overall">Overall</option>
-                                        <option value="Assignment">Assignment</option>
-                                        <option value="Coursework">Coursework</option>
-                                        <option value="Exam">Exam</option>
-                                        <option value="Other">Other</option>
-                                      </Select>
-                                    </Field>
-
-                                    <Field label="Label">
-                                      <Input
-                                        value={c.name}
-                                        onChange={(e) => updateComponent(idx, cIdx, { name: e.target.value })}
-                                        placeholder="e.g., Coursework 1"
-                                        style={{ minWidth: 190 }}
-                                      />
-                                    </Field>
-
-                                    <Field label="Weight (% of module)">
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        max={100}
-                                        value={String(c.weight ?? "")}
-                                        disabled={!!m.autoComponentWeights}
-                                        onChange={(e) => updateComponent(idx, cIdx, { weight: clampNumber(Number(e.target.value), 0, 100) })}
-                                      />
-                                    </Field>
-
-                                    <Field label="Mark (%)">
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        max={100}
-                                        value={String(c.mark ?? "")}
-                                        onChange={(e) => updateComponent(idx, cIdx, { mark: clampNumber(Number(e.target.value), 0, 100) })}
-                                      />
-                                    </Field>
-
-                                    <div className="sw-delCell">
-                                      {(m.components || []).length > 1 ? (
-                                        <Button variant="danger" className="sw-x" onClick={() => removeComponent(idx, cIdx)} title="Remove assessment">
-                                          ✕
-                                        </Button>
-                                      ) : null}
-                                    </div>
+                              <div className="sw-assessHead">
+                                <div>
+                                  <div className="sw-sectionTitle" style={{ fontSize: 14 }}>
+                                    Modules
                                   </div>
                                 </div>
-                              </details>
-                            ))}
-                          </div>
+                                <Button variant="ghost" className="sw-assessAdd" onClick={() => addModule(yIdx, semIdx)}>
+                                  + Add module
+                                </Button>
+                              </div>
 
-                          {state.modules.length > 1 ? (
-                            <div style={{ marginTop: 14 }}>
-                              <Button variant="danger" onClick={() => removeModule(idx)}>
-                                Remove module
-                              </Button>
+                              <div className="sw-components">
+                                {(sem.modules || []).map((m, modIdx) => {
+                                  const modCalc = computeModuleMark(m);
+                                  const modMark = Number.isFinite(modCalc.mark) ? modCalc.mark : 0;
+                                  const compSum = (m.components || []).reduce((a, c) => a + (Number(c.weight) || 0), 0);
+
+                                  return (
+                                    <details key={m.id || modIdx} className="sw-subaccordion" open={modIdx === 0}>
+                                      <summary className="sw-subaccordion__summary">
+                                        <div className="sw-subaccordion__left">
+                                          <div className="sw-subaccordion__title">
+                                            {(m.code || `Module ${modIdx + 1}`) + (m.title ? ` — ${m.title}` : "")}
+                                          </div>
+                                          <div className="sw-subaccordion__meta">
+                                            {activeYear.autoModuleWeights ? "Auto weight" : `${Math.round(Number(m.weight) || 0)}% of year`} •{" "}
+                                            {(m.components || []).length} assessments
+                                          </div>
+                                        </div>
+                                        <div className="sw-subaccordion__right">
+                                          <div className="sw-subaccordion__mark">{formatPct(modMark)}</div>
+                                        </div>
+                                      </summary>
+
+                                      <div className="sw-subaccordion__body">
+                                        <div className="sw-grid2">
+                                          <Field label="Module code">
+                                            <Input value={m.code} onChange={(e) => updateModule(yIdx, semIdx, modIdx, { code: e.target.value })} placeholder="e.g., CS301" />
+                                          </Field>
+                                          <Field label="Title">
+                                            <Input value={m.title} onChange={(e) => updateModule(yIdx, semIdx, modIdx, { title: e.target.value })} placeholder="e.g., Machine Learning" />
+                                          </Field>
+                                          <Field label="Weight (% of year)">
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              max={100}
+                                              value={String(m.weight ?? "")}
+                                              disabled={!!activeYear.autoModuleWeights}
+                                              onChange={(e) => updateModule(yIdx, semIdx, modIdx, { weight: clampNumber(Number(e.target.value), 0, 100) })}
+                                            />
+                                          </Field>
+                                          <Field label="Credits (optional)">
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              value={String(m.credits ?? "")}
+                                              onChange={(e) => updateModule(yIdx, semIdx, modIdx, { credits: clampNumber(Number(e.target.value), 0, 200) })}
+                                            />
+                                          </Field>
+                                        </div>
+
+                                        <div className="sw-inlineCard sw-inlineCard--row" style={{ marginTop: 12 }}>
+                                          <div>
+                                            <div className="sw-inlineCard__title">Calculated module mark</div>
+                                            <div className="sw-inlineCard__sub">Assessment weights sum: {Math.round(compSum)}%</div>
+                                          </div>
+                                          <div className="sw-inlineCard__pill">{formatPct(modMark)}</div>
+                                        </div>
+
+                                        <div className="sw-assessHead">
+                                          <div>
+                                            <div className="sw-sectionTitle" style={{ fontSize: 14 }}>
+                                              Assessments
+                                            </div>
+                                            <div className="sw-sectionSub">Weights contribute to the module mark.</div>
+                                          </div>
+                                          <div className="sw-assessHead__right">
+                                            <label className="sw-toggle">
+                                              <input
+                                                type="checkbox"
+                                                checked={!!m.autoComponentWeights}
+                                                onChange={(e) => setAutoComponentWeights(yIdx, semIdx, modIdx, e.target.checked)}
+                                              />
+                                              <span>Auto weights</span>
+                                            </label>
+                                            <Button variant="ghost" className="sw-assessAdd" onClick={() => addComponent(yIdx, semIdx, modIdx)}>
+                                              + Add
+                                            </Button>
+                                          </div>
+                                        </div>
+
+                                        <div className="sw-components">
+                                          {(m.components || []).map((c, cIdx) => (
+                                            <details key={c.id || cIdx} className="sw-subaccordion" open={false}>
+                                              <summary className="sw-subaccordion__summary">
+                                                <div className="sw-subaccordion__left">
+                                                  <div className="sw-subaccordion__title">{c.name || c.type || `Assessment ${cIdx + 1}`}</div>
+                                                  <div className="sw-subaccordion__meta">
+                                                    {c.type} • {Math.round(Number(c.weight) || 0)}%
+                                                  </div>
+                                                </div>
+                                                <div className="sw-subaccordion__right">
+                                                  <div className="sw-subaccordion__mark">{formatPct(Number(c.mark))}</div>
+                                                </div>
+                                              </summary>
+
+                                              <div className="sw-subaccordion__body">
+                                                <div className="sw-grid2">
+                                                  <Field label="Type">
+                                                    <Select
+                                                      value={c.type}
+                                                      onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        updateComponent(yIdx, semIdx, modIdx, cIdx, { type: v, name: c.name === c.type ? v : c.name });
+                                                      }}
+                                                    >
+                                                      <option value="Overall">Overall</option>
+                                                      <option value="Assignment">Assignment</option>
+                                                      <option value="Coursework">Coursework</option>
+                                                      <option value="Exam">Exam</option>
+                                                      <option value="Other">Other</option>
+                                                    </Select>
+                                                  </Field>
+
+                                                  <Field label="Label">
+                                                    <Input
+                                                      value={c.name}
+                                                      onChange={(e) => updateComponent(yIdx, semIdx, modIdx, cIdx, { name: e.target.value })}
+                                                      placeholder="e.g., Coursework 1"
+                                                    />
+                                                  </Field>
+
+                                                  <Field label="Weight (% of module)">
+                                                    <Input
+                                                      type="number"
+                                                      min={0}
+                                                      max={100}
+                                                      value={String(c.weight ?? "")}
+                                                      disabled={!!m.autoComponentWeights}
+                                                      onChange={(e) => updateComponent(yIdx, semIdx, modIdx, cIdx, { weight: clampNumber(Number(e.target.value), 0, 100) })}
+                                                    />
+                                                  </Field>
+
+                                                  <Field label="Mark (%)">
+                                                    <Input
+                                                      type="number"
+                                                      min={0}
+                                                      max={100}
+                                                      value={String(c.mark ?? "")}
+                                                      onChange={(e) => updateComponent(yIdx, semIdx, modIdx, cIdx, { mark: clampNumber(Number(e.target.value), 0, 100) })}
+                                                    />
+                                                  </Field>
+                                                </div>
+
+                                                {(m.components || []).length > 1 ? (
+                                                  <div className="sw-removeRow">
+                                                    <Button
+                                                      variant="danger"
+                                                      className="sw-btn--sm"
+                                                      onClick={() => removeComponent(yIdx, semIdx, modIdx, cIdx)}
+                                                    >
+                                                      <span className="sw-btn__icon" aria-hidden="true">✕</span>
+                                                      Remove assessment
+                                                    </Button>
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            </details>
+                                          ))}
+                                        </div>
+
+                                        {(sem.modules || []).length > 1 ? (
+                                          <div className="sw-removeRow">
+                                            <Button variant="danger" className="sw-btn--sm" onClick={() => removeModule(yIdx, semIdx, modIdx)}>
+                                              <span className="sw-btn__icon" aria-hidden="true">✕</span>
+                                              Remove module
+                                            </Button>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </details>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          ) : null}
-                        </div>
-                      </details>
-                    );
-                  })}
-                </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+
+                    {state.years.length > 1 ? (
+                      <div className="sw-removeRow">
+                        <Button variant="danger" className="sw-btn--sm" onClick={() => removeYear(yIdx)}>
+                          <span className="sw-btn__icon" aria-hidden="true">✕</span>
+                          Remove {activeYear.name || "this year"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -1146,8 +1546,12 @@ export default function SemesterWrappedApp() {
                       <div className="sw-inlineCard__title">Visibility</div>
                     </div>
                     <label className="sw-toggle" style={{ marginTop: 10 }}>
+                      <input type="checkbox" checked={!!state.showYearBreakdown} onChange={(e) => set({ showYearBreakdown: e.target.checked })} />
+                      <span>Show year breakdown (when multiple years)</span>
+                    </label>
+                    <label className="sw-toggle" style={{ marginTop: 8 }}>
                       <input type="checkbox" checked={!!state.showModuleMarks} onChange={(e) => set({ showModuleMarks: e.target.checked })} />
-                      <span>Show module marks on the card</span>
+                      <span>Show marks on the card</span>
                     </label>
                     <label className="sw-toggle" style={{ marginTop: 8 }}>
                       <input
@@ -1155,10 +1559,10 @@ export default function SemesterWrappedApp() {
                         checked={!!state.showAssessmentsInBreakdown}
                         onChange={(e) => set({ showAssessmentsInBreakdown: e.target.checked })}
                       />
-                      <span>Show assessments in module breakdown</span>
+                      <span>Show assessments (single-year view)</span>
                     </label>
                     <div className="sw-inlineCard__sub" style={{ marginTop: 8 }}>
-                      Turn off marks and/or assessments to simplify what appears on the card.
+                      Turn off year breakdown to show your modules instead.
                     </div>
                   </div>
 
