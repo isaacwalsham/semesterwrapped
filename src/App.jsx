@@ -41,8 +41,8 @@ const DEFAULTS = {
   university: "Your University",
   course: "BSc Biology",
   subtitle: "Class of 2026",
-  headline: "My Degree Wrapped",
-  caption: "Proud of how this degree turned out 🎓",
+  headline: "My Semester Wrapped",
+  caption: "Proud of my results this semester 🎓",
   linkedinHandle: "",
 
   showModuleMarks: true,
@@ -292,7 +292,7 @@ function sanitizeFileName(name) {
     .replace(/\s+/g, " ")
     .trim();
 
-  const safe = cleaned && cleaned.replace(/\./g, "").length ? cleaned : "degree-wrapped";
+  const safe = cleaned && cleaned.replace(/\./g, "").length ? cleaned : "semester-wrapped";
   return safe.slice(0, 80);
 }
 
@@ -752,7 +752,7 @@ function WrappedCard({ state }) {
             {caption ? safeText(caption, 84) : ""}
           </div>
           <div className="sw-card__footerRight" style={{ color: theme.primary, fontSize: layout.hashtag, fontWeight: 900 }}>
-            #DegreeWrapped
+            #SemesterWrapped
           </div>
         </div>
       </div>
@@ -770,7 +770,7 @@ export default function SemesterWrappedApp() {
   const previewCardRef = useRef(null);
   const editorBodyRef = useRef(null);
 
-  const [fileName, setFileName] = useState(() => "degree-wrapped");
+  const [fileName, setFileName] = useState(() => "semester-wrapped");
   const [captionCopied, setCaptionCopied] = useState(false);
 
   const degree = useMemo(() => computeDegree(state.years), [state.years]);
@@ -974,7 +974,7 @@ export default function SemesterWrappedApp() {
       `\n` +
       `${yearLines}\n` +
       (linkedInLine ? `\n${linkedInLine}\n` : "\n") +
-      `#DegreeWrapped #university #students`
+      `#SemesterWrapped #university #students`
     );
   }
 
@@ -1073,7 +1073,7 @@ export default function SemesterWrappedApp() {
       <div className={`sw-shell ${isMobileLayout ? "sw-shell--mobile-mode" : ""}`}>
         <div className="sw-topbar">
           <div className="sw-brand">
-            <div className="sw-title">Degree Wrapped</div>
+            <div className="sw-title">Semester Wrapped</div>
           </div>
 
           <div className="sw-actions">
@@ -1084,7 +1084,7 @@ export default function SemesterWrappedApp() {
                   className="sw-input sw-file__input"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
-                  placeholder="degree-wrapped"
+                  placeholder="semester-wrapped"
                 />
               </div>
             </div>
@@ -1094,7 +1094,7 @@ export default function SemesterWrappedApp() {
                 setState(DEFAULTS);
                 setActiveTab("info");
                 setActiveYearIdx(0);
-                setFileName("degree-wrapped");
+                setFileName("semester-wrapped");
               }}
             >
               Reset
